@@ -377,6 +377,51 @@ async function handleRequest(request, { params }) {
       return json({ user: sanitizeUser(user), organization: clean(org), accessToken, refreshToken, expiresIn: ACCESS_TTL });
     }
 
+    if (path === '/auth/demo' && method === 'POST') {
+      // One-click demo login: creates (or reuses) a demo org + demo admin user, seeds Customer360 once.
+      const db = await getDb();
+      const DEMO_EMAIL = 'demo@afinityos.app';
+      let user = await db.collection('users').findOne({ email: DEMO_EMAIL });
+      let org;
+      if (!user) {
+        const orgId = uuidv4();
+        org = {
+          id: orgId, name: 'AfinityOS Demo', logoUrl: null,
+          timezone: 'America/Los_Angeles', currency: 'USD', language: 'en-US',
+          plan: 'business', settings: { brandColor: '#7c3aed' },
+          createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+        };
+        await db.collection('organizations').insertOne(org);
+        user = {
+          id: uuidv4(), email: DEMO_EMAIL, name: 'Demo Admin',
+          passwordHash: hashPassword('Demo@123'),
+          role: 'org_admin', permissions: ROLE_PERMISSIONS.org_admin,
+          organizationId: orgId, avatarUrl: null, title: 'Demo Account',
+          phone: null, status: 'active',
+          createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+        };
+        await db.collection('users').insertOne(user);
+        // Seed demo customers + sub-collections so Customer360 is rich on first visit
+        await seedDemoCustomers(db, orgId, user.name, 6);
+      } else {
+        org = await db.collection('organizations').findOne({ id: user.organizationId });
+      }
+      const accessToken = signJwt({ sub: user.id, email: user.email, role: user.role, orgId: user.organizationId }, ACCESS_TTL);
+      const refreshToken = signJwt({ sub: user.id, type: 'refresh', jti: uuidv4() }, REFRESH_TTL, JWT_REFRESH_SECRET);
+      await db.collection('refresh_tokens').insertOne({
+        token: refreshToken, userId: user.id,
+        createdAt: new Date(), expiresAt: new Date(Date.now() + REFRESH_TTL * 1000),
+      });
+      return json({
+        user: sanitizeUser(user),
+        organization: clean(org),
+        accessToken, refreshToken, expiresIn: ACCESS_TTL,
+        demo: true,
+        credentials: { email: DEMO_EMAIL, password: 'Demo@123', note: 'You can also sign in manually with these credentials.' },
+      });
+    }
+
+
     if (path === '/auth/refresh' && method === 'POST') {
       const body = await request.json();
       const { refreshToken } = body || {};
