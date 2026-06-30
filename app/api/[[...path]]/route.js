@@ -170,7 +170,7 @@ async function handleRequest(request, { params }) {
       await db.collection('users').insertOne(user);
 
       const accessToken = signJwt({ sub: user.id, email: user.email, role: user.role, orgId }, ACCESS_TTL);
-      const refreshToken = signJwt({ sub: user.id, type: 'refresh' }, REFRESH_TTL, JWT_REFRESH_SECRET);
+      const refreshToken = signJwt({ sub: user.id, type: 'refresh', jti: uuidv4() }, REFRESH_TTL, JWT_REFRESH_SECRET);
       await db.collection('refresh_tokens').insertOne({
         token: refreshToken,
         userId: user.id,
@@ -197,7 +197,7 @@ async function handleRequest(request, { params }) {
       if (!verifyPassword(password, user.passwordHash)) return errorJson('Invalid credentials', 401);
 
       const accessToken = signJwt({ sub: user.id, email: user.email, role: user.role, orgId: user.organizationId }, ACCESS_TTL);
-      const refreshToken = signJwt({ sub: user.id, type: 'refresh' }, REFRESH_TTL, JWT_REFRESH_SECRET);
+      const refreshToken = signJwt({ sub: user.id, type: 'refresh', jti: uuidv4() }, REFRESH_TTL, JWT_REFRESH_SECRET);
       await db.collection('refresh_tokens').insertOne({
         token: refreshToken,
         userId: user.id,
@@ -226,7 +226,7 @@ async function handleRequest(request, { params }) {
       const user = await db.collection('users').findOne({ id: payload.sub });
       if (!user) return errorJson('User not found', 404);
       const newAccess = signJwt({ sub: user.id, email: user.email, role: user.role, orgId: user.organizationId }, ACCESS_TTL);
-      const newRefresh = signJwt({ sub: user.id, type: 'refresh' }, REFRESH_TTL, JWT_REFRESH_SECRET);
+      const newRefresh = signJwt({ sub: user.id, type: 'refresh', jti: uuidv4() }, REFRESH_TTL, JWT_REFRESH_SECRET);
       // rotate
       await db.collection('refresh_tokens').deleteOne({ token: refreshToken });
       await db.collection('refresh_tokens').insertOne({

@@ -114,9 +114,9 @@ user_problem_statement: |
 backend:
   - task: "JWT auth with refresh tokens (register, login, refresh, logout, forgot-password, me, profile)"
     implemented: true
-    working: false
+    working: true
     file: "app/api/[[...path]]/route.js"
-    stuck_count: 1
+    stuck_count: 0
     priority: "high"
     needs_retesting: false
     status_history:
@@ -189,18 +189,63 @@ backend:
           ✅ Password reset doesn't enumerate users (always 200)
           
           Test files created: /app/backend_test.py, /app/debug_refresh_test.py, /app/isolated_refresh_test.py
+      - working: true
+        agent: "testing"
+        comment: |
+          RE-TEST AFTER FIX - ALL TESTS PASSING (35/35 - 100%)
+          
+          ✅ CRITICAL BUG FIXED: Refresh token rotation now working perfectly!
+          
+          FIX APPLIED:
+          - Added unique `jti` (uuidv4) field to each refresh token payload
+          - This ensures that even if two tokens are signed in the same second with the same user ID,
+            they will have different signatures due to the unique jti value
+          - Lines 173, 200, 229 in app/api/[[...path]]/route.js now include jti: uuidv4()
+          
+          ISOLATED REFRESH TOKEN ROTATION TEST:
+          ✅ 5/5 passes (was 1/5 before fix)
+          - Each test verified that:
+            1. POST /api/auth/refresh with valid refreshToken returns 200 with NEW tokens
+            2. New refreshToken is different from old refreshToken
+            3. New accessToken works on /api/auth/me
+            4. POST /api/auth/refresh with OLD refreshToken returns 401 (token revoked)
+          
+          FULL BACKEND TEST SUITE:
+          ✅ 35/35 tests passing (100% success rate, was 34/35 before)
+          
+          All endpoints verified:
+          ✅ GET /api/health
+          ✅ POST /api/auth/register (success, role handling, validation, duplicate detection)
+          ✅ POST /api/auth/login (success, invalid credentials, validation)
+          ✅ GET /api/auth/me (valid token, no token, malformed tokens)
+          ✅ PUT /api/auth/profile (update, persistence, no token)
+          ✅ POST /api/auth/refresh (token rotation, invalid token, missing token) - NOW WORKING!
+          ✅ POST /api/auth/logout (with token, without token)
+          ✅ POST /api/auth/forgot-password (existing email, non-existent, validation)
+          ✅ GET /api/auth/roles
+          
+          SECURITY VERIFICATION:
+          ✅ No passwordHash leakage in any response
+          ✅ No MongoDB _id exposure in any response
+          ✅ All user objects use UUID-based id field
+          ✅ Proper 401 responses for invalid/missing tokens
+          ✅ Proper 400 responses for missing required fields
+          ✅ Proper 409 response for duplicate email
+          ✅ Password reset doesn't enumerate users (always 200)
+          ✅ Refresh token rotation prevents token reuse (CRITICAL SECURITY FIX)
+          
+          CONCLUSION: All backend authentication APIs are working correctly. The critical security
+          vulnerability with refresh token rotation has been completely resolved.
 
 metadata:
   created_by: "main_agent"
   version: "1.0"
-  test_sequence: 2
+  test_sequence: 3
   run_ui: false
 
 test_plan:
-  current_focus:
-    - "JWT auth with refresh tokens (register, login, refresh, logout, forgot-password, me, profile)"
-  stuck_tasks:
-    - "JWT auth with refresh tokens (register, login, refresh, logout, forgot-password, me, profile)"
+  current_focus: []
+  stuck_tasks: []
   test_all: false
   test_priority: "high_first"
 
@@ -240,3 +285,17 @@ agent_communication:
       ✅ No security leaks (passwordHash, _id properly sanitized)
       
       RECOMMENDATION: Fix the refresh token rotation bug before production deployment.
+  - agent: "testing"
+    message: |
+      RE-TEST COMPLETE - CRITICAL BUG FIXED! 🎉
+      
+      REFRESH TOKEN ROTATION FIX VERIFIED:
+      ✅ Isolated test: 5/5 passes (was 1/5 before)
+      ✅ Full test suite: 35/35 passes (100% success rate)
+      
+      The unique `jti` (uuidv4) fix has completely resolved the token rotation issue.
+      Old refresh tokens are now properly rejected with 401 after being used.
+      
+      All backend authentication APIs are working correctly and securely.
+      No critical issues remaining.
+
