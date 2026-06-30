@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { MongoClient } from 'mongodb';
 import crypto from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
+import { gateway, eventBus } from '@/lib/modules-registry';
+import { apiLogger } from '@/lib/api-logger';
 
 // ---------- MongoDB singleton ----------
 let cachedClient = null;
@@ -270,10 +272,19 @@ async function handleRequest(request, { params }) {
   const path = '/' + segments.join('/');
   const method = request.method;
 
+  // Gateway context (used for logging + module dispatch)
+  const ctx = { requestId: uuidv4(), startedAt: Date.now(), path, method, request };
+
   try {
+    // Try gateway dispatch first (modules, /events, /gateway, /modules)
+    const gatewayResponse = await gateway.dispatch(segments, ctx, { getAuthUser });
+    if (gatewayResponse) return gatewayResponse;
+
     // Health
     if (path === '/health' && method === 'GET') {
-      return json({ status: 'ok', service: 'afinityos', time: new Date().toISOString() });
+      const res = json({ status: 'ok', service: 'afinityos', time: new Date().toISOString() });
+      apiLogger.log(ctx, 200).catch(() => {});
+      return res;
     }
 
     // ---------- AUTH ----------
@@ -617,6 +628,11 @@ async function handleRequest(request, { params }) {
         actor: { name: user.name, type: 'user' },
         occurredAt: new Date().toISOString(),
       });
+      // Emit domain event: customer.created (fans out to all module listeners)
+      await eventBus.emit('customer.created', clean(customer), {
+        organizationId: user.organizationId,
+        actor: { id: user.id, name: user.name, type: 'user' },
+      }, { db });
       return json({ customer: clean(customer) }, 201);
     }
 

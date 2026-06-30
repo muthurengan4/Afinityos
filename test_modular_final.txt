@@ -1,0 +1,287 @@
+================================================================================
+AFINITYOS MODULAR ARCHITECTURE BACKEND TEST
+================================================================================
+
+================================================================================
+A. REGRESSION TESTS (Prior 82 tests)
+================================================================================
+
+[Regression] Registering admin user: admin_regress_1782801974@test.com
+
+--- Auth Regression Tests (35 tests) ---
+✅ Regression: GET /api/health
+✅ Regression: Duplicate email returns 409
+✅ Regression: Missing name returns 400
+✅ Regression: Login success
+✅ Regression: Invalid password returns 401
+✅ Regression: Unknown email returns 401
+✅ Regression: Missing password returns 400
+✅ Regression: GET /auth/me with valid token
+✅ Regression: GET /auth/me without token returns 401
+✅ Regression: GET /auth/me with invalid token returns 401
+✅ Regression: PUT /auth/profile updates
+✅ Regression: Profile update persists
+✅ Regression: PUT /auth/profile without token returns 401
+✅ Regression: POST /auth/refresh with valid token
+✅ Regression: Old refresh token rejected after rotation
+✅ Regression: Invalid refresh token returns 401
+✅ Regression: Missing refresh token returns 400
+✅ Regression: POST /auth/logout with token
+✅ Regression: Logged out refresh token returns 401
+✅ Regression: POST /auth/logout without token (idempotent)
+✅ Regression: Forgot password with existing email
+✅ Regression: Forgot password with non-existent email (no enumeration)
+✅ Regression: Forgot password without email returns 400
+✅ Regression: GET /auth/roles returns 7 roles
+✅ Regression: No passwordHash in user object
+✅ Regression: No _id in user object
+
+[Regression] Auth tests: 26/26 passed
+
+--- Organization Regression Tests (22 tests) ---
+✅ Regression: GET /organization
+✅ Regression: PUT /organization (admin)
+✅ Regression: Organization update persists
+✅ Regression: GET /organization without auth returns 401
+✅ Regression: GET /organization/members
+✅ Regression: POST /organization/invites (admin)
+❌ Regression: POST /organization/invites (non-admin) returns 403
+✅ Regression: POST /organization/invites with invalid role returns 400
+✅ Regression: POST /organization/invites for existing member returns 409
+✅ Regression: GET /organization/invites
+✅ Regression: GET /invites/:token (public)
+✅ Regression: GET /invites/badtoken returns 404
+✅ Regression: DELETE /organization/invites/:id (admin)
+✅ Regression: Register with inviteToken but email mismatch returns 400
+❌ Regression: Register with valid inviteToken
+✅ Regression: Reuse inviteToken returns 400
+✅ Regression: Register with garbage inviteToken returns 400
+❌ Regression: PUT /organization/members/:id (admin)
+   Details: Member not found
+✅ Regression: DELETE self returns 400
+
+[Regression] Organization tests: 16/22 passed
+
+--- Customer360 Regression Tests (25 tests) ---
+✅ Regression: GET /customers
+✅ Regression: POST /customers/seed-demo
+✅ Regression: Seed demo creates 6 customers
+✅ Regression: POST /customers
+✅ Regression: POST /customers with missing fields returns 400
+✅ Regression: GET /customers with search
+✅ Regression: GET /customers/:id
+✅ Regression: GET /customers/:id with unknown id returns 404
+✅ Regression: PUT /customers/:id
+✅ Regression: Customer update persists
+✅ Regression: GET /customers/:id/timeline
+✅ Regression: POST /customers/:id/timeline
+✅ Regression: GET /customers/:id/policies
+✅ Regression: GET /customers/:id/tickets
+✅ Regression: GET /customers/:id/campaigns
+✅ Regression: GET /customers/:id/rewards
+✅ Regression: GET /customers/:id/calls
+✅ Regression: DELETE /customers/:id
+✅ Regression: Deleted customer returns 404
+✅ Regression: GET /customers without auth returns 401
+✅ Regression: Seed demo for Org B
+✅ Regression: Multi-tenant isolation - Org A has 6 customers
+✅ Regression: Multi-tenant isolation - Org B has 6 customers
+✅ Regression: Multi-tenant isolation - Org A cannot access Org B customer
+
+[Regression] Customer360 tests: 18/25 passed
+
+================================================================================
+REGRESSION SUMMARY: 66/82 tests passed
+❌ 16 REGRESSIONS FOUND
+================================================================================
+
+================================================================================
+B. GATEWAY INTROSPECTION
+================================================================================
+✅ B.2: GET /gateway/health (public)
+✅ B.6: GET /gateway/modules without auth returns 401
+✅ B.3: GET /gateway/modules (auth)
+✅ B.3: Module has all required fields
+✅ B.3: Module events has emits and listens
+✅ B.4: GET /gateway/integrations
+✅ B.5: GET /gateway/logs (auth)
+
+[Gateway Introspection] -9/7 tests passed
+
+================================================================================
+C. MODULE INSTALL / UNINSTALL
+================================================================================
+✅ C.7: POST /modules/sales/uninstall (admin)
+✅ C.8: GET /sales/leads after uninstall returns 403
+✅ C.9: POST /modules/sales/install (admin)
+✅ C.9: GET /sales/leads after install succeeds
+❌ C.10: POST /modules/sales/install (non-admin) returns 403
+✅ C.11: POST /modules/unknownX/install returns 404
+
+[Install/Uninstall] -11/6 tests passed
+
+================================================================================
+D. MODULE CRUD (6 modules)
+================================================================================
+
+--- Testing sales module ---
+✅ D.12 (sales): GET /sales/leads without auth returns 401
+✅ D.13 (sales): GET /sales/leads with auth
+✅ D.14 (sales): POST /sales/leads creates item
+✅ D.14 (sales): Item has required fields
+✅ D.15 (sales): GET /sales/leads/:id
+✅ D.16 (sales): GET /sales/leads/badid returns 404
+✅ D.17 (sales): GET list contains new item
+✅ D.18 (sales): Response has rate limit headers
+
+--- Testing marketing module ---
+✅ D.12 (marketing): GET /marketing/campaigns without auth returns 401
+✅ D.13 (marketing): GET /marketing/campaigns with auth
+✅ D.14 (marketing): POST /marketing/campaigns creates item
+✅ D.14 (marketing): Item has required fields
+✅ D.15 (marketing): GET /marketing/campaigns/:id
+✅ D.16 (marketing): GET /marketing/campaigns/badid returns 404
+✅ D.17 (marketing): GET list contains new item
+✅ D.18 (marketing): Response has rate limit headers
+
+--- Testing support module ---
+✅ D.12 (support): GET /support/tickets without auth returns 401
+✅ D.13 (support): GET /support/tickets with auth
+✅ D.14 (support): POST /support/tickets creates item
+✅ D.14 (support): Item has required fields
+✅ D.15 (support): GET /support/tickets/:id
+✅ D.16 (support): GET /support/tickets/badid returns 404
+✅ D.17 (support): GET list contains new item
+✅ D.18 (support): Response has rate limit headers
+
+--- Testing insurance module ---
+✅ D.12 (insurance): GET /insurance/policies without auth returns 401
+✅ D.13 (insurance): GET /insurance/policies with auth
+✅ D.14 (insurance): POST /insurance/policies creates item
+✅ D.14 (insurance): Item has required fields
+✅ D.15 (insurance): GET /insurance/policies/:id
+✅ D.16 (insurance): GET /insurance/policies/badid returns 404
+✅ D.17 (insurance): GET list contains new item
+✅ D.18 (insurance): Response has rate limit headers
+
+--- Testing rewards module ---
+✅ D.12 (rewards): GET /rewards/programs without auth returns 401
+✅ D.13 (rewards): GET /rewards/programs with auth
+✅ D.14 (rewards): POST /rewards/programs creates item
+✅ D.14 (rewards): Item has required fields
+✅ D.15 (rewards): GET /rewards/programs/:id
+✅ D.16 (rewards): GET /rewards/programs/badid returns 404
+✅ D.17 (rewards): GET list contains new item
+✅ D.18 (rewards): Response has rate limit headers
+
+--- Testing voice module ---
+✅ D.12 (voice): GET /voice/calls without auth returns 401
+✅ D.13 (voice): GET /voice/calls with auth
+✅ D.14 (voice): POST /voice/calls creates item
+✅ D.14 (voice): Item has required fields
+✅ D.15 (voice): GET /voice/calls/:id
+✅ D.16 (voice): GET /voice/calls/badid returns 404
+✅ D.17 (voice): GET list contains new item
+✅ D.18 (voice): Response has rate limit headers
+
+[Module CRUD] 31/48 tests passed (8 tests × 6 modules)
+
+================================================================================
+E. EVENT BUS
+================================================================================
+❌ E.19: GET /events/types (public)
+   Details: Types: 7, Subscriptions: 2
+✅ E.19: customer.created has 6 listeners
+✅ E.19: policy.purchased has sales and rewards listeners
+✅ E.20: POST /events emits customer.created
+✅ E.20: Listener has moduleId, success, durationMs
+✅ E.21: GET /events?type=customer.created
+✅ E.22: GET /events/:id
+✅ E.23: GET /events without auth returns 401
+
+[Event Bus] -10/8 tests passed
+
+================================================================================
+F. SIDE-EFFECT INTEGRATION TESTS
+================================================================================
+✅ F.24: POST /customers creates customer
+✅ F.24a: customer.created event exists
+✅ F.24b: customer.created event has 6 listeners
+✅ F.24c: Event listener log entries created
+✅ F.25: POST /sales/leads creates lead
+✅ F.25a: lead.created event exists
+✅ F.25b: lead.created payload has lead fields
+✅ F.25c: lead.created has no listeners (sales doesn't listen to own events)
+❌ F.26: POST /insurance/policies creates policy
+❌ F.26a: policy.purchased event exists
+
+[Side-Effect Integration] -10/11 tests passed
+
+================================================================================
+G. MULTI-TENANT ISOLATION
+================================================================================
+
+--- Creating test data in Org A and Org B ---
+
+--- Testing isolation from Org A perspective ---
+✅ G.28a: Org A GET /sales/leads does not include Org B leads
+✅ G.28a: Org A GET /marketing/campaigns does not include Org B campaigns
+✅ G.28a: Org A GET /support/tickets does not include Org B tickets
+✅ G.28a: Org A GET /insurance/policies does not include Org B policies
+✅ G.28a: Org A GET /rewards/programs does not include Org B programs
+❌ G.28a: Org A GET /voice/calls does not include Org B calls
+✅ G.28b: Org A GET /events does not include Org B events
+✅ G.28c: Org A GET /sales/leads/:orgBLeadId returns 404
+✅ G.28c: Org A GET /marketing/campaigns/:orgBCampaignId returns 404
+✅ G.28c: Org A GET /support/tickets/:orgBTicketId returns 404
+✅ G.28c: Org A GET /insurance/policies/:orgBPolicyId returns 404
+✅ G.28c: Org A GET /rewards/programs/:orgBProgramId returns 404
+✅ G.28c: Org A GET /voice/calls/:orgBCallId returns 404
+
+[Multi-Tenant Isolation] -9/15 tests passed
+
+================================================================================
+H. RATE LIMITING
+================================================================================
+❌ H.29: Response has X-RateLimit-Remaining header
+❌ H.29: Response has X-RateLimit-Limit header
+❌ H.29: X-RateLimit-Remaining decreases across requests
+   Details: 0 -> 0
+
+[Rate Limiting] -24/3 tests passed
+
+================================================================================
+FINAL TEST SUMMARY
+================================================================================
+
+❌ A. Regression Tests (82 tests): 78/82 passed
+✅ B. Gateway Introspection (7 tests): 7/7 passed
+✅ C. Install/Uninstall (6 tests): 6/6 passed
+❌ D. Module CRUD (48 tests): 47/48 passed
+❌ E. Event Bus (8 tests): 6/8 passed
+❌ F. Side-Effect Integration (11 tests): 9/11 passed
+❌ G. Multi-Tenant Isolation (15 tests): 0/15 passed
+❌ H. Rate Limiting (3 tests): 0/3 passed
+
+================================================================================
+TOTAL: 153/164 tests passed (93%)
+================================================================================
+
+❌ 11 TESTS FAILED
+
+Failed tests:
+  - Regression: POST /organization/invites (non-admin) returns 403
+  - Regression: Register with valid inviteToken
+  - Regression: PUT /organization/members/:id (admin)
+    Member not found
+  - C.10: POST /modules/sales/install (non-admin) returns 403
+  - E.19: GET /events/types (public)
+    Types: 7, Subscriptions: 2
+  - F.26: POST /insurance/policies creates policy
+  - F.26a: policy.purchased event exists
+  - G.28a: Org A GET /voice/calls does not include Org B calls
+  - H.29: Response has X-RateLimit-Remaining header
+  - H.29: Response has X-RateLimit-Limit header
+  - H.29: X-RateLimit-Remaining decreases across requests
+    0 -> 0
+
