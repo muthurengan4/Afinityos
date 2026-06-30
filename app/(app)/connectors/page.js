@@ -191,7 +191,12 @@ export default function ConnectorsPage() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2"><Label>Base URL</Label><Input placeholder="https://crm.your-domain.com" value={cfgForm.baseUrl} onChange={(e) => setCfgForm({ ...cfgForm, baseUrl: e.target.value })} /></div>
-            <div className="space-y-2"><Label>API key</Label><Input type="password" placeholder="sk-..." value={cfgForm.apiKey} onChange={(e) => setCfgForm({ ...cfgForm, apiKey: e.target.value })} /></div>
+            <div className="space-y-2"><Label>Static API key (optional)</Label><Input type="password" placeholder="sk-... (leave empty if using service login)" value={cfgForm.apiKey} onChange={(e) => setCfgForm({ ...cfgForm, apiKey: e.target.value })} /></div>
+            <div className="text-xs text-muted-foreground">— or use a service account with JWT login —</div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2"><Label>Service email</Label><Input placeholder="service@…" value={cfgForm.serviceEmail || ''} onChange={(e) => setCfgForm({ ...cfgForm, serviceEmail: e.target.value })} /></div>
+              <div className="space-y-2"><Label>Service password</Label><Input type="password" value={cfgForm.servicePassword || ''} onChange={(e) => setCfgForm({ ...cfgForm, servicePassword: e.target.value })} /></div>
+            </div>
             <p className="text-xs text-muted-foreground">Default env keys: <code className="font-mono">{configFor?.envKey}_URL</code>, <code className="font-mono">{configFor?.envKey}_API_KEY</code></p>
           </div>
           <DialogFooter>

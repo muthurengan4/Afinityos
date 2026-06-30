@@ -813,6 +813,613 @@ def print_summary():
     
     print("\n" + "="*80)
 
+def test_demo_login():
+    """Test POST /api/auth/demo - idempotent demo login"""
+    print("\n=== Testing POST /api/auth/demo ===")
+    
+    try:
+        resp1 = requests.post(f"{API_BASE}/auth/demo", timeout=10)
+        data1 = resp1.json()
+        
+        if resp1.status_code != 200:
+            log_test("POST /api/auth/demo", False, f"Status {resp1.status_code}, body: {data1}")
+            return None
+        
+        # Check required fields
+        required = ['user', 'organization', 'accessToken', 'refreshToken']
+        missing = [f for f in required if f not in data1]
+        if missing:
+            log_test("POST /api/auth/demo", False, f"Missing fields: {missing}")
+            return None
+        
+        # Call again to verify idempotency
+        resp2 = requests.post(f"{API_BASE}/auth/demo", timeout=10)
+        data2 = resp2.json()
+        
+        if data1['user']['id'] != data2['user']['id']:
+            log_test("POST /api/auth/demo", False, "Demo login not idempotent - different user IDs")
+            return None
+        
+        log_test("POST /api/auth/demo", True, f"Demo user: {data1['user']['email']}, idempotent: ✓")
+        return data1
+    except Exception as e:
+        log_test("POST /api/auth/demo", False, f"Exception: {str(e)}")
+        return None
+
+def test_discovery_reports_with_auth():
+    """Test GET /api/discovery/reports with auth"""
+    print("\n=== Testing GET /api/discovery/reports (with auth) ===")
+    
+    # Get auth token
+    demo_data = test_demo_login()
+    if not demo_data:
+        log_test("GET /api/discovery/reports (with auth)", False, "Failed to get demo token")
+        return None
+    
+    headers = {"Authorization": f"Bearer {demo_data['accessToken']}"}
+    
+    try:
+        resp = requests.get(f"{API_BASE}/discovery/reports", headers=headers, timeout=10)
+        data = resp.json()
+        
+        if resp.status_code != 200:
+            log_test("GET /api/discovery/reports (with auth)", False, f"Status {resp.status_code}, body: {data}")
+            return None
+        
+        # Check structure
+        if 'reports' not in data or 'prebaked' not in data:
+            log_test("GET /api/discovery/reports (with auth)", False, f"Missing reports or prebaked. Got: {data.keys()}")
+            return None
+        
+        # Check prebaked reports
+        prebaked = data['prebaked']
+        if not isinstance(prebaked, list) or len(prebaked) != 3:
+            log_test("GET /api/discovery/reports (with auth)", False, f"Expected 3 prebaked reports, got {len(prebaked)}")
+            return None
+        
+        # Verify prebaked structure
+        for report in prebaked:
+            required_fields = ['id', 'baseUrl', 'framework', 'authMechanism', 'discoveredEndpoints']
+            missing = [f for f in required_fields if f not in report]
+            if missing:
+                log_test("GET /api/discovery/reports (with auth)", False, f"Prebaked report missing fields: {missing}")
+                return None
+        
+        log_test("GET /api/discovery/reports (with auth)", True, f"Reports: {len(data['reports'])}, Prebaked: {len(prebaked)}")
+        return data
+    except Exception as e:
+        log_test("GET /api/discovery/reports (with auth)", False, f"Exception: {str(e)}")
+        return None
+
+def test_discovery_reports_without_auth():
+    """Test GET /api/discovery/reports without auth"""
+    print("\n=== Testing GET /api/discovery/reports (without auth) ===")
+    
+    try:
+        resp = requests.get(f"{API_BASE}/discovery/reports", timeout=10)
+        if resp.status_code == 401:
+            log_test("GET /api/discovery/reports (without auth)", True, "Correctly returned 401")
+            return True
+        else:
+            log_test("GET /api/discovery/reports (without auth)", False, f"Expected 401, got {resp.status_code}")
+            return False
+    except Exception as e:
+        log_test("GET /api/discovery/reports (without auth)", False, f"Exception: {str(e)}")
+        return False
+
+def test_discovery_prebaked():
+    """Test GET /api/discovery/prebaked"""
+    print("\n=== Testing GET /api/discovery/prebaked ===")
+    
+    try:
+        resp = requests.get(f"{API_BASE}/discovery/prebaked", timeout=10)
+        data = resp.json()
+        
+        if resp.status_code != 200:
+            log_test("GET /api/discovery/prebaked", False, f"Status {resp.status_code}, body: {data}")
+            return False
+        
+        if 'reports' not in data or len(data['reports']) != 3:
+            log_test("GET /api/discovery/prebaked", False, f"Expected 3 reports, got {len(data.get('reports', []))}")
+            return False
+        
+        log_test("GET /api/discovery/prebaked", True, f"Returned {len(data['reports'])} prebaked reports")
+        return True
+    except Exception as e:
+        log_test("GET /api/discovery/prebaked", False, f"Exception: {str(e)}")
+        return False
+
+def test_discovery_scan_valid():
+    """Test POST /api/discovery/scan with valid URL"""
+    print("\n=== Testing POST /api/discovery/scan (valid URL) ===")
+    
+    # Get auth token
+    demo_data = test_demo_login()
+    if not demo_data:
+        log_test("POST /api/discovery/scan (valid URL)", False, "Failed to get demo token")
+        return None
+    
+    headers = {"Authorization": f"Bearer {demo_data['accessToken']}"}
+    payload = {
+        "url": "https://point-vault.preview.emergentagent.com",
+        "label": "Point Vault Test Scan"
+    }
+    
+    try:
+        print("   Note: Scan may take 30-60 seconds...")
+        resp = requests.post(f"{API_BASE}/discovery/scan", json=payload, headers=headers, timeout=120)
+        data = resp.json()
+        
+        if resp.status_code != 200:
+            log_test("POST /api/discovery/scan (valid URL)", False, f"Status {resp.status_code}, body: {data}")
+            return None
+        
+        if 'report' not in data:
+            log_test("POST /api/discovery/scan (valid URL)", False, f"Missing report in response. Got: {data.keys()}")
+            return None
+        
+        report = data['report']
+        
+        # Verify report structure
+        required_fields = ['id', 'baseUrl', 'framework', 'authMechanism', 'endpoints', 'rawProbeCount']
+        missing = [f for f in required_fields if f not in report]
+        if missing:
+            log_test("POST /api/discovery/scan (valid URL)", False, f"Report missing fields: {missing}")
+            return None
+        
+        # Verify baseUrl matches
+        if report['baseUrl'] != "https://point-vault.preview.emergentagent.com":
+            log_test("POST /api/discovery/scan (valid URL)", False, f"BaseUrl mismatch: {report['baseUrl']}")
+            return None
+        
+        # Verify framework and authMechanism are strings
+        if not isinstance(report['framework'], str) or not isinstance(report['authMechanism'], str):
+            log_test("POST /api/discovery/scan (valid URL)", False, "Framework or authMechanism not strings")
+            return None
+        
+        # Verify endpoints is an array
+        if not isinstance(report['endpoints'], list):
+            log_test("POST /api/discovery/scan (valid URL)", False, "Endpoints not an array")
+            return None
+        
+        # Verify rawProbeCount > 0
+        if report['rawProbeCount'] <= 0:
+            log_test("POST /api/discovery/scan (valid URL)", False, f"rawProbeCount should be > 0, got {report['rawProbeCount']}")
+            return None
+        
+        # Verify id is a UUID
+        try:
+            uuid.UUID(report['id'])
+        except:
+            log_test("POST /api/discovery/scan (valid URL)", False, f"ID is not a valid UUID: {report['id']}")
+            return None
+        
+        log_test("POST /api/discovery/scan (valid URL)", True, 
+                f"Scan complete: {report['framework']}, {len(report['endpoints'])} endpoints, {report['rawProbeCount']} probes")
+        return report
+    except Exception as e:
+        log_test("POST /api/discovery/scan (valid URL)", False, f"Exception: {str(e)}")
+        return None
+
+def test_discovery_scan_persisted():
+    """Test that scanned report appears in GET /api/discovery/reports"""
+    print("\n=== Testing discovery scan persistence ===")
+    
+    # Get auth token
+    demo_data = test_demo_login()
+    if not demo_data:
+        log_test("Discovery scan persistence", False, "Failed to get demo token")
+        return False
+    
+    headers = {"Authorization": f"Bearer {demo_data['accessToken']}"}
+    
+    try:
+        # Get reports
+        resp = requests.get(f"{API_BASE}/discovery/reports", headers=headers, timeout=10)
+        data = resp.json()
+        
+        if resp.status_code != 200:
+            log_test("Discovery scan persistence", False, f"Failed to get reports: {resp.status_code}")
+            return False
+        
+        # Check if we have any saved reports
+        reports = data.get('reports', [])
+        if len(reports) > 0:
+            # Find Point Vault scan
+            point_vault_scans = [r for r in reports if 'point-vault' in r.get('baseUrl', '').lower()]
+            if point_vault_scans:
+                log_test("Discovery scan persistence", True, f"Found {len(point_vault_scans)} Point Vault scan(s) in saved reports")
+                return True
+            else:
+                log_test("Discovery scan persistence", False, "No Point Vault scans found in saved reports")
+                return False
+        else:
+            log_test("Discovery scan persistence", False, "No saved reports found")
+            return False
+    except Exception as e:
+        log_test("Discovery scan persistence", False, f"Exception: {str(e)}")
+        return False
+
+def test_discovery_scan_missing_url():
+    """Test POST /api/discovery/scan without URL"""
+    print("\n=== Testing POST /api/discovery/scan (missing URL) ===")
+    
+    # Get auth token
+    demo_data = test_demo_login()
+    if not demo_data:
+        log_test("POST /api/discovery/scan (missing URL)", False, "Failed to get demo token")
+        return False
+    
+    headers = {"Authorization": f"Bearer {demo_data['accessToken']}"}
+    payload = {"label": "Test"}
+    
+    try:
+        resp = requests.post(f"{API_BASE}/discovery/scan", json=payload, headers=headers, timeout=10)
+        if resp.status_code == 400:
+            data = resp.json()
+            if 'url required' in data.get('error', '').lower():
+                log_test("POST /api/discovery/scan (missing URL)", True, "Correctly returned 400 with 'url required'")
+                return True
+            else:
+                log_test("POST /api/discovery/scan (missing URL)", False, f"Got 400 but wrong error: {data}")
+                return False
+        else:
+            log_test("POST /api/discovery/scan (missing URL)", False, f"Expected 400, got {resp.status_code}")
+            return False
+    except Exception as e:
+        log_test("POST /api/discovery/scan (missing URL)", False, f"Exception: {str(e)}")
+        return False
+
+def test_discovery_multitenant_isolation():
+    """Test multi-tenant isolation for discovery reports"""
+    print("\n=== Testing discovery multi-tenant isolation ===")
+    
+    # Get Org A token (demo)
+    demo_data = test_demo_login()
+    if not demo_data:
+        log_test("Discovery multi-tenant isolation", False, "Failed to get demo token")
+        return False
+    
+    org_a_headers = {"Authorization": f"Bearer {demo_data['accessToken']}"}
+    
+    # Register Org B user
+    org_b_email = generate_unique_email()
+    org_b_payload = {
+        "email": org_b_email,
+        "password": "SecurePass123!",
+        "name": "Org B User",
+        "orgName": "Organization B"
+    }
+    
+    try:
+        reg_resp = requests.post(f"{API_BASE}/auth/register", json=org_b_payload, timeout=10)
+        if reg_resp.status_code != 201:
+            log_test("Discovery multi-tenant isolation", False, f"Org B registration failed: {reg_resp.status_code}")
+            return False
+        
+        org_b_data = reg_resp.json()
+        org_b_headers = {"Authorization": f"Bearer {org_b_data['accessToken']}"}
+        
+        # Get Org A reports
+        org_a_resp = requests.get(f"{API_BASE}/discovery/reports", headers=org_a_headers, timeout=10)
+        org_a_reports = org_a_resp.json().get('reports', [])
+        
+        # Get Org B reports
+        org_b_resp = requests.get(f"{API_BASE}/discovery/reports", headers=org_b_headers, timeout=10)
+        org_b_reports = org_b_resp.json().get('reports', [])
+        
+        # Org B should not see Org A's saved scans
+        if len(org_a_reports) > 0:
+            # Check if any Org A report IDs appear in Org B's reports
+            org_a_ids = {r['id'] for r in org_a_reports}
+            org_b_ids = {r['id'] for r in org_b_reports}
+            
+            overlap = org_a_ids & org_b_ids
+            if overlap:
+                log_test("Discovery multi-tenant isolation", False, f"Org B can see Org A's reports: {overlap}")
+                return False
+            else:
+                log_test("Discovery multi-tenant isolation", True, f"Org A: {len(org_a_reports)} reports, Org B: {len(org_b_reports)} reports, no overlap")
+                return True
+        else:
+            log_test("Discovery multi-tenant isolation", True, "Org A has no saved reports, Org B isolation verified")
+            return True
+    except Exception as e:
+        log_test("Discovery multi-tenant isolation", False, f"Exception: {str(e)}")
+        return False
+
+def test_connector_config_jwt_credentials():
+    """Test POST /api/connectors/sales/config with JWT credentials"""
+    print("\n=== Testing POST /api/connectors/sales/config (JWT credentials) ===")
+    
+    # Get admin token
+    demo_data = test_demo_login()
+    if not demo_data:
+        log_test("POST /api/connectors/sales/config (JWT credentials)", False, "Failed to get demo token")
+        return False
+    
+    headers = {"Authorization": f"Bearer {demo_data['accessToken']}"}
+    payload = {
+        "baseUrl": "https://crm-automation-ref.preview.emergentagent.com",
+        "serviceEmail": "nonexistent@example.com",
+        "servicePassword": "WrongPassword123"
+    }
+    
+    try:
+        resp = requests.post(f"{API_BASE}/connectors/sales/config", json=payload, headers=headers, timeout=10)
+        data = resp.json()
+        
+        if resp.status_code != 200:
+            log_test("POST /api/connectors/sales/config (JWT credentials)", False, f"Status {resp.status_code}, body: {data}")
+            return False
+        
+        if not data.get('success') or not data.get('configured'):
+            log_test("POST /api/connectors/sales/config (JWT credentials)", False, f"Expected success and configured. Got: {data}")
+            return False
+        
+        log_test("POST /api/connectors/sales/config (JWT credentials)", True, "Sales connector configured with JWT credentials")
+        return True
+    except Exception as e:
+        log_test("POST /api/connectors/sales/config (JWT credentials)", False, f"Exception: {str(e)}")
+        return False
+
+def test_connector_configured_status():
+    """Test GET /api/connectors shows sales as configured"""
+    print("\n=== Testing GET /api/connectors (sales configured) ===")
+    
+    # Get auth token
+    demo_data = test_demo_login()
+    if not demo_data:
+        log_test("GET /api/connectors (sales configured)", False, "Failed to get demo token")
+        return False
+    
+    headers = {"Authorization": f"Bearer {demo_data['accessToken']}"}
+    
+    try:
+        resp = requests.get(f"{API_BASE}/connectors", headers=headers, timeout=10)
+        data = resp.json()
+        
+        if resp.status_code != 200:
+            log_test("GET /api/connectors (sales configured)", False, f"Status {resp.status_code}, body: {data}")
+            return False
+        
+        connectors = data.get('connectors', [])
+        sales_connector = next((c for c in connectors if c['id'] == 'sales'), None)
+        
+        if not sales_connector:
+            log_test("GET /api/connectors (sales configured)", False, "Sales connector not found")
+            return False
+        
+        if not sales_connector.get('configured'):
+            log_test("GET /api/connectors (sales configured)", False, f"Sales connector not configured: {sales_connector}")
+            return False
+        
+        log_test("GET /api/connectors (sales configured)", True, "Sales connector shows as configured")
+        return True
+    except Exception as e:
+        log_test("GET /api/connectors (sales configured)", False, f"Exception: {str(e)}")
+        return False
+
+def test_connector_jwt_login_failure():
+    """Test connector tool call with wrong JWT credentials"""
+    print("\n=== Testing connector JWT login failure ===")
+    
+    # Get auth token
+    demo_data = test_demo_login()
+    if not demo_data:
+        log_test("Connector JWT login failure", False, "Failed to get demo token")
+        return False
+    
+    headers = {"Authorization": f"Bearer {demo_data['accessToken']}"}
+    
+    # First, reconfigure with JWT credentials (clearing any apiKey)
+    config_payload = {
+        "baseUrl": "https://crm-automation-ref.preview.emergentagent.com",
+        "serviceEmail": "nonexistent@example.com",
+        "servicePassword": "WrongPassword123",
+        "apiKey": None  # Clear any existing apiKey
+    }
+    requests.post(f"{API_BASE}/connectors/sales/config", json=config_payload, headers=headers, timeout=10)
+    
+    payload = {
+        "firstName": "John",
+        "lastName": "Doe",
+        "email": "john.doe@example.com"
+    }
+    
+    try:
+        resp = requests.post(f"{API_BASE}/connectors/sales/tools/create_lead", json=payload, headers=headers, timeout=15)
+        data = resp.json()
+        
+        if resp.status_code != 200:
+            log_test("Connector JWT login failure", False, f"Expected 200, got {resp.status_code}, body: {data}")
+            return False
+        
+        result = data.get('result', {})
+        
+        # Check mode is 'live'
+        if result.get('mode') != 'live':
+            log_test("Connector JWT login failure", False, f"Expected mode='live', got '{result.get('mode')}'")
+            return False
+        
+        # Check ok is false
+        if result.get('ok') != False:
+            log_test("Connector JWT login failure", False, f"Expected ok=false, got {result.get('ok')}")
+            return False
+        
+        # Check status is 401
+        if result.get('status') != 401:
+            log_test("Connector JWT login failure", False, f"Expected status=401, got {result.get('status')}")
+            return False
+        
+        # Check error message mentions login failure
+        error = result.get('error', '').lower()
+        if 'login failed' not in error and 'service credentials' not in error:
+            log_test("Connector JWT login failure", False, f"Error should mention 'login failed' or 'service credentials'. Got: {result.get('error')}")
+            return False
+        
+        log_test("Connector JWT login failure", True, f"JWT login correctly failed with 401: {result.get('error')}")
+        return True
+    except Exception as e:
+        log_test("Connector JWT login failure", False, f"Exception: {str(e)}")
+        return False
+
+def test_connector_config_api_key():
+    """Test POST /api/connectors/sales/config with API key"""
+    print("\n=== Testing POST /api/connectors/sales/config (API key) ===")
+    
+    # Get admin token
+    demo_data = test_demo_login()
+    if not demo_data:
+        log_test("POST /api/connectors/sales/config (API key)", False, "Failed to get demo token")
+        return False
+    
+    headers = {"Authorization": f"Bearer {demo_data['accessToken']}"}
+    payload = {
+        "apiKey": "static-key-123"
+    }
+    
+    try:
+        resp = requests.post(f"{API_BASE}/connectors/sales/config", json=payload, headers=headers, timeout=10)
+        data = resp.json()
+        
+        if resp.status_code != 200:
+            log_test("POST /api/connectors/sales/config (API key)", False, f"Status {resp.status_code}, body: {data}")
+            return False
+        
+        if not data.get('success'):
+            log_test("POST /api/connectors/sales/config (API key)", False, f"Expected success. Got: {data}")
+            return False
+        
+        log_test("POST /api/connectors/sales/config (API key)", True, "Sales connector reconfigured with API key")
+        return True
+    except Exception as e:
+        log_test("POST /api/connectors/sales/config (API key)", False, f"Exception: {str(e)}")
+        return False
+
+def test_connector_api_key_mode():
+    """Test connector tool call with API key (should run in live mode)"""
+    print("\n=== Testing connector with API key (live mode) ===")
+    
+    # Get auth token
+    demo_data = test_demo_login()
+    if not demo_data:
+        log_test("Connector with API key (live mode)", False, "Failed to get demo token")
+        return False
+    
+    headers = {"Authorization": f"Bearer {demo_data['accessToken']}"}
+    payload = {
+        "firstName": "Jane",
+        "lastName": "Smith",
+        "email": "jane.smith@example.com"
+    }
+    
+    try:
+        resp = requests.post(f"{API_BASE}/connectors/sales/tools/create_lead", json=payload, headers=headers, timeout=15)
+        data = resp.json()
+        
+        if resp.status_code != 200:
+            log_test("Connector with API key (live mode)", False, f"Expected 200, got {resp.status_code}, body: {data}")
+            return False
+        
+        result = data.get('result', {})
+        
+        # Check mode is 'live'
+        if result.get('mode') != 'live':
+            log_test("Connector with API key (live mode)", False, f"Expected mode='live', got '{result.get('mode')}'")
+            return False
+        
+        # Should NOT have 'login failed' error
+        error = result.get('error', '').lower()
+        if 'login failed' in error:
+            log_test("Connector with API key (live mode)", False, f"Should not have 'login failed' error with API key. Got: {result.get('error')}")
+            return False
+        
+        log_test("Connector with API key (live mode)", True, f"Tool ran in live mode with API key (ok={result.get('ok')}, status={result.get('status')})")
+        return True
+    except Exception as e:
+        log_test("Connector with API key (live mode)", False, f"Exception: {str(e)}")
+        return False
+
+def test_ai_tools_calls_audit():
+    """Test GET /api/ai-tools/calls shows both connector calls"""
+    print("\n=== Testing GET /api/ai-tools/calls (audit log) ===")
+    
+    # Get auth token
+    demo_data = test_demo_login()
+    if not demo_data:
+        log_test("GET /api/ai-tools/calls (audit log)", False, "Failed to get demo token")
+        return False
+    
+    headers = {"Authorization": f"Bearer {demo_data['accessToken']}"}
+    
+    try:
+        resp = requests.get(f"{API_BASE}/ai-tools/calls", headers=headers, timeout=10)
+        data = resp.json()
+        
+        if resp.status_code != 200:
+            log_test("GET /api/ai-tools/calls (audit log)", False, f"Status {resp.status_code}, body: {data}")
+            return False
+        
+        calls = data.get('calls', [])
+        
+        # Find sales connector calls
+        sales_calls = [c for c in calls if c.get('connectorId') == 'sales' and c.get('toolName') == 'create_lead']
+        
+        if len(sales_calls) < 2:
+            log_test("GET /api/ai-tools/calls (audit log)", False, f"Expected at least 2 sales calls, found {len(sales_calls)}")
+            return False
+        
+        # Check that both calls have mode='live'
+        live_calls = [c for c in sales_calls if c.get('mode') == 'live']
+        if len(live_calls) < 2:
+            log_test("GET /api/ai-tools/calls (audit log)", False, f"Expected at least 2 live mode calls, found {len(live_calls)}")
+            return False
+        
+        log_test("GET /api/ai-tools/calls (audit log)", True, f"Found {len(sales_calls)} sales calls, {len(live_calls)} in live mode")
+        return True
+    except Exception as e:
+        log_test("GET /api/ai-tools/calls (audit log)", False, f"Exception: {str(e)}")
+        return False
+
+def test_regression_smoke():
+    """Test regression smoke tests"""
+    print("\n=== Testing regression smoke tests ===")
+    
+    # Get auth token
+    demo_data = test_demo_login()
+    if not demo_data:
+        log_test("Regression smoke tests", False, "Failed to get demo token")
+        return False
+    
+    headers = {"Authorization": f"Bearer {demo_data['accessToken']}"}
+    
+    endpoints = [
+        ("/gateway/health", "GET"),
+        ("/connectors", "GET"),
+        ("/events/types", "GET"),
+        ("/customers", "GET"),
+    ]
+    
+    all_passed = True
+    for path, method in endpoints:
+        try:
+            if method == "GET":
+                resp = requests.get(f"{API_BASE}{path}", headers=headers, timeout=10)
+            else:
+                resp = requests.post(f"{API_BASE}{path}", headers=headers, timeout=10)
+            
+            if resp.status_code == 200:
+                log_test(f"Regression: {method} {path}", True, "200 OK")
+            else:
+                log_test(f"Regression: {method} {path}", False, f"Expected 200, got {resp.status_code}")
+                all_passed = False
+        except Exception as e:
+            log_test(f"Regression: {method} {path}", False, f"Exception: {str(e)}")
+            all_passed = False
+    
+    return all_passed
+
 def main():
     """Run all tests"""
     print("="*80)
@@ -846,6 +1453,36 @@ def main():
     test_forgot_password_missing_email()
     test_auth_roles()
     test_access_token_from_register()
+    
+    # Integration Discovery Engine tests
+    print("\n" + "="*80)
+    print("INTEGRATION DISCOVERY ENGINE TESTS")
+    print("="*80)
+    test_demo_login()
+    test_discovery_reports_with_auth()
+    test_discovery_reports_without_auth()
+    test_discovery_prebaked()
+    test_discovery_scan_valid()
+    test_discovery_scan_persisted()
+    test_discovery_scan_missing_url()
+    test_discovery_multitenant_isolation()
+    
+    # BaseConnector JWT login caching tests
+    print("\n" + "="*80)
+    print("BASE-CONNECTOR JWT LOGIN CACHING TESTS")
+    print("="*80)
+    test_connector_config_jwt_credentials()
+    test_connector_configured_status()
+    test_connector_jwt_login_failure()
+    test_connector_config_api_key()
+    test_connector_api_key_mode()
+    test_ai_tools_calls_audit()
+    
+    # Regression tests
+    print("\n" + "="*80)
+    print("REGRESSION SMOKE TESTS")
+    print("="*80)
+    test_regression_smoke()
     
     # Print summary
     print_summary()

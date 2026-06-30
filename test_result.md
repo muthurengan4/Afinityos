@@ -896,3 +896,152 @@ agent_communication:
       
       NO CRITICAL ISSUES FOUND. All backend APIs are production-ready.
 
+
+
+backend:
+  - task: "Integration Discovery Engine + BaseConnector JWT login caching"
+    implemented: true
+    working: true
+    file: "lib/discovery/engine.js, lib/discovery/prebaked-reports.js, lib/connectors/base-connector.js, lib/gateway.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          Built the Integration Discovery Engine that probes external hosts and returns an
+          OpenAPI-shaped Integration Discovery Report — no manual route configuration required.
+
+          New library files:
+          - /app/lib/discovery/engine.js
+              * scanHost(baseUrl) — probes KNOWN_OPENAPI_PATHS, KNOWN_HEALTH_PATHS, KNOWN_DOC_PATHS,
+                COMMON_ROUTES (~30 common REST routes). Returns { id, baseUrl, scannedAt, durationMs,
+                framework, authMechanism, hasOpenApi, openapi, endpointsFound, endpoints, rawProbeCount }.
+                Framework detection: FastAPI / Go / Express / Unknown. Auth detection via 401/403 bodies + WWW-Authenticate.
+              * saveReport / listReports — persist + retrieve from `discovery_reports` collection (org-scoped).
+          - /app/lib/discovery/prebaked-reports.js
+              * 3 pre-baked reports for the user's Emergent preview apps
+                (crm-automation-ref, point-vault, insurtech-ui-upgrade) with discoveredEndpoints +
+                connectorMapping + notes.
+
+          New gateway routes (auth-required):
+            GET  /api/discovery/reports   -> { reports: saved, prebaked: PREBAKED_REPORTS }
+            POST /api/discovery/scan      -> { url, label? } probes URL + saves report
+            GET  /api/discovery/prebaked  -> returns the 3 pre-baked reports
+
+          BaseConnector upgrade (/app/lib/connectors/base-connector.js):
+            * Added serviceEmail + servicePassword fields to per-org connector_configs.
+            * New loginAndGetToken(orgId, cfg) — POSTs to {baseUrl}{loginPath || '/api/auth/login'},
+              caches `access_token` in `connector_configs.cachedToken` with a 10-minute TTL.
+            * request() now prefers static apiKey; otherwise performs login+JWT flow and injects
+              Authorization: Bearer <token>. setConfig invalidates the cached token.
+
+          NEW collection: `discovery_reports` (org-scoped).
+          UI: /app/app/(app)/discovery/page.js renders Reports + scan form + report detail dialog.
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ ALL TESTS PASSING (65/65 - 100% success rate)
+          
+          A) INTEGRATION DISCOVERY ENGINE - ALL WORKING:
+             ✅ GET /api/discovery/reports (with auth) → 200 with reports[] and prebaked[3]
+             ✅ GET /api/discovery/reports (without auth) → 401 (correctly protected)
+             ✅ GET /api/discovery/prebaked → 200 with 3 prebaked reports
+             ✅ POST /api/discovery/scan (valid URL) → 200, scanned Point Vault successfully
+                - Found 5 endpoints, 72 probes, framework: FastAPI (Python)
+                - Report has valid UUID, baseUrl matches, endpoints is array
+             ✅ Discovery scan persistence → Scan saved and appears in GET /api/discovery/reports
+             ✅ POST /api/discovery/scan (missing URL) → 400 "url required"
+             ✅ Multi-tenant isolation → Org A's scans NOT visible to Org B ✓
+          
+          B) BASE-CONNECTOR JWT LOGIN CACHING - ALL WORKING:
+             ✅ POST /api/connectors/sales/config (JWT credentials) → 200 configured
+             ✅ GET /api/connectors → sales.configured === true
+             ✅ Tool call with wrong JWT credentials → mode='live', ok=false, status=401
+                Error: "[sales] login failed against https://crm-automation-ref.preview.emergentagent.com/api/auth/login — check service credentials."
+             ✅ POST /api/connectors/sales/config (API key) → 200 configured
+             ✅ Tool call with API key → mode='live', no "login failed" error (uses Bearer token)
+             ✅ GET /api/ai-tools/calls → All calls logged with mode='live'
+          
+          C) REGRESSION SMOKE TESTS - ALL PASSING:
+             ✅ GET /api/gateway/health → 200
+             ✅ GET /api/connectors → 200
+             ✅ GET /api/events/types → 200
+             ✅ GET /api/customers → 200
+             ✅ POST /api/auth/demo → idempotent (same user.id on repeat)
+          
+          BUG FIXED:
+          - Fixed /app/lib/gateway.js line 117: connector config route wasn't passing serviceEmail 
+            and servicePassword to setConfig(). Added these fields to the setConfig call.
+          - Fixed /app/lib/gateway.js line 142: connector tool execution was returning HTTP status 
+            based on result.status (401 for failures). Changed to always return 200 with result 
+            object containing ok/status/error fields.
+
+test_plan:
+  current_focus:
+    - "Integration Discovery Engine + BaseConnector JWT login caching"
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+  - agent: "main"
+    message: |
+      Please test the new Integration Discovery Engine + the updated BaseConnector JWT login caching.
+
+      A) DISCOVERY ENDPOINTS (auth required; use demo login via POST /api/auth/demo):
+         1) GET  /api/discovery/reports     -> 200 { reports: [], prebaked: <3 items> }
+                  Each prebaked report has id, baseUrl, framework, authMechanism, discoveredEndpoints[].
+         2) GET  /api/discovery/prebaked    -> 200 { reports: <3 items> }
+         3) POST /api/discovery/scan with body { url: "https://point-vault.preview.emergentagent.com",
+                  label: "Point Vault" } -> 200 { report } where:
+                    - report.baseUrl matches input
+                    - report.framework is a string
+                    - report.authMechanism is a string
+                    - report.endpoints is an array (may be non-empty since /api/rewards is public)
+                    - report.rawProbeCount > 0
+                    - report.id is a UUID
+         4) Subsequent GET /api/discovery/reports should include that scan in `reports`.
+         5) POST /api/discovery/scan without body { url } -> 400 "url required".
+         6) Any discovery endpoint without auth -> 401.
+         7) Multi-tenant isolation: Org A's saved scans must NOT appear when Org B calls
+            GET /api/discovery/reports. (Prebaked is global and may appear for both.)
+
+      B) BASE-CONNECTOR JWT LOGIN CACHING:
+         8) POST /api/connectors/sales/config (admin) with body
+              { baseUrl: "https://crm-automation-ref.preview.emergentagent.com",
+                serviceEmail: "nonexistent@example.com",
+                servicePassword: "WrongPassword123" }
+            -> 200 { success: true, configured: true }
+         9) GET /api/connectors -> sales.configured === true.
+         10) POST /api/connectors/sales/tools/create_lead with body
+              { firstName: "Test", lastName: "User", email: "test@example.com" }
+            -> 200 with mode === 'live' AND ok === false AND status === 401 (login failed against real CRM
+            with bogus credentials). The error message must mention 'login failed' or contain 'service credentials'.
+         11) POST /api/connectors/sales/config with body { apiKey: "static-key-123" } (replacing creds)
+            -> 200; subsequent calls should attempt request with Authorization: Bearer static-key-123
+            (will likely fail with non-401 status since CRM expects JWT, but mode must be 'live' and not error
+            about login).
+         12) Audit log GET /api/ai-tools/calls should include both calls with mode='live'.
+
+      C) REGRESSION (smoke):
+         - GET /api/gateway/health, /api/connectors, /api/events/types, /api/customers all still 200.
+         - POST /api/auth/demo idempotent.
+
+      NOTE: The CRM URL is real and reachable but credentials are fake — expect login failures (status 401, ok:false)
+      which is the CORRECT signal that the login flow ran.
+  - agent: "testing"
+    message: |
+      ✅ TESTING COMPLETE - ALL TESTS PASSING (65/65 - 100%)
+      
+      Integration Discovery Engine + BaseConnector JWT login caching are both fully functional.
+      
+      BUGS FIXED:
+      1. /app/lib/gateway.js line 117: Added serviceEmail and servicePassword to setConfig() call
+      2. /app/lib/gateway.js line 142: Changed connector tool execution to always return HTTP 200 
+         with result object (instead of returning HTTP status based on tool result)
+      
+      All discovery endpoints working correctly with proper auth, multi-tenant isolation, and scan functionality.
+      JWT login caching working correctly - login failures properly detected, API key mode working, audit log complete.
+      All regression tests passing.
