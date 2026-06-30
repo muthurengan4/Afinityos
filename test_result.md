@@ -299,3 +299,209 @@ agent_communication:
       All backend authentication APIs are working correctly and securely.
       No critical issues remaining.
 
+
+
+backend:
+  - task: "Organization management (settings + members + invites)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          New endpoints (all scoped by user.organizationId):
+            GET  /api/organization                     -> current org (any auth user)
+            PUT  /api/organization                     -> admin only; updates name, logoUrl, timezone, currency, language, plan, settings
+            GET  /api/organization/members             -> list users in this org (no passwordHash leak)
+            PUT  /api/organization/members/:userId     -> admin only; change role (validated against VALID_ROLES)
+            DELETE /api/organization/members/:userId   -> admin only; cannot remove self; also wipes refresh tokens
+            GET  /api/organization/invites             -> list invites (pending/accepted/cancelled)
+            POST /api/organization/invites             -> admin only; { email, role }; returns invite with token
+            DELETE /api/organization/invites/:id       -> admin only; sets status = cancelled
+            GET  /api/invites/:token                   -> PUBLIC preview (email, role, status, org name/logo/plan)
+          Register now accepts an optional `inviteToken`:
+            - if provided, validates pending/expired/email-match, attaches user to that org with invite.role,
+              marks invite accepted; org is NOT created in that branch.
+          Multi-tenancy: every read/write filters by organizationId.
+      - working: true
+        agent: "testing"
+        comment: |
+          COMPREHENSIVE TESTING COMPLETE - ALL TESTS PASSING (22/22 - 100%)
+          
+          ✅ ORGANIZATION ENDPOINTS (4/4):
+          1. GET /api/organization (any member) → 200 with all required fields (id, name, timezone, currency, language, plan, createdAt, updatedAt)
+          2. PUT /api/organization (admin) → 200, updates persist (verified via subsequent GET)
+          3. PUT /api/organization (non-admin) → 403 (tested with sales user)
+          4. GET /api/organization (no auth) → 401
+          
+          ✅ MEMBERS ENDPOINTS (6/6):
+          5. GET /api/organization/members → 200, returns list with current user, no passwordHash or _id
+          6. PUT /api/organization/members/:userId (admin) → 200, role updated to marketing, persists
+          7. PUT /api/organization/members/:userId (non-admin) → 403
+          8. PUT /api/organization/members/:userId (invalid role) → 400
+          9. DELETE /api/organization/members/:userId (admin) → 200, member removed, refresh tokens revoked (verified 401 on /auth/refresh)
+          10. DELETE /api/organization/members/:userId (self) → 400 "Cannot remove yourself"
+          
+          ✅ INVITES ENDPOINTS (8/8):
+          11. POST /api/organization/invites (admin) → 201 with invite object (id, token, organizationId, email, role, status: pending, expiresAt)
+          12. POST /api/organization/invites (non-admin) → 403
+          13. POST /api/organization/invites (invalid role) → 400
+          14. POST /api/organization/invites (existing member email) → 409
+          15. GET /api/organization/invites (any member) → 200 with list, no _id
+          16. GET /api/invites/:token (PUBLIC, no auth) → 200 with invite (email, role, status, expiresAt, createdByName) and organization (id, name, logoUrl, plan), no passwordHash or _id
+          17. GET /api/invites/badtoken → 404
+          18. DELETE /api/organization/invites/:id (admin) → 200, status set to cancelled
+          
+          ✅ REGISTER WITH INVITE (4/4):
+          19. POST /api/auth/register with inviteToken → 201, user.role = invite.role, user.organizationId = invite org, no new org created
+          20. Reuse same inviteToken → 400 (already used)
+          21. Register with inviteToken but email mismatch → 400
+          22. Register with garbage inviteToken → 400
+          
+          SECURITY VERIFICATION:
+          ✅ No passwordHash leakage in any response
+          ✅ No MongoDB _id exposure in any response
+          ✅ Admin-only endpoints properly enforce ADMIN_ROLES (org_admin, super_admin)
+          ✅ Non-admin roles (sales, marketing, support, executive, standard_user) correctly denied admin operations
+          ✅ Proper 401 responses for missing/invalid auth
+          ✅ Proper 403 responses for insufficient permissions
+          ✅ Proper 400 responses for invalid input
+          ✅ Proper 409 responses for conflicts
+          
+          ROLE VERIFICATION:
+          ✅ org_admin and super_admin have admin privileges
+          ✅ sales, marketing, support, executive, standard_user are non-admin
+          ✅ Register without inviteToken → org_admin of new org
+          ✅ Register with inviteToken → invite's role in invite's org
+
+  - task: "Customer360 master profile schema + CRUD + sub-collections"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          Collections (all carry organizationId for tenant isolation):
+            customers, customer_timeline, customer_policies, customer_tickets,
+            customer_campaigns, customer_rewards, customer_calls
+          Endpoints:
+            GET  /api/customers?q=&limit=        -> list (org-scoped), search across firstName/lastName/email/company
+            POST /api/customers                  -> create (+ auto-creates "signup" timeline event)
+            POST /api/customers/seed-demo        -> seeds 6 demo customers w/ full sub-collection data
+            GET  /api/customers/:id              -> master profile
+            PUT  /api/customers/:id              -> partial update of allowed fields
+            DELETE /api/customers/:id            -> cascades to all sub-collections
+            GET  /api/customers/:id/timeline     -> sorted desc by occurredAt
+            POST /api/customers/:id/timeline     -> append event
+            GET  /api/customers/:id/policies     -> insurance policies
+            GET  /api/customers/:id/tickets      -> support tickets
+            GET  /api/customers/:id/campaigns    -> marketing campaign exposure
+            GET  /api/customers/:id/rewards      -> single rewards profile (tier, points, perks, history)
+            GET  /api/customers/:id/calls        -> voice + AI calls w/ summary + transcript
+          Every fetch enforces { organizationId: user.organizationId }.
+      - working: true
+        agent: "testing"
+        comment: |
+          COMPREHENSIVE TESTING COMPLETE - ALL TESTS PASSING (18/18 - 100%)
+          
+          ✅ CUSTOMER CRUD (10/10):
+          23. GET /api/customers (fresh org) → 200 { customers: [], total: 0 }
+          24. POST /api/customers/seed-demo → 200 { success: true, seeded: 6 }, subsequent GET returns 6 customers with all required fields (id, organizationId, firstName, lastName, email, phone, company, jobTitle, segment, plan, healthScore, lifetimeValue, mrr, tags, ownerName, createdAt, updatedAt), no _id
+          25. POST /api/customers { firstName, lastName, email } → 201, customer.organizationId = current user's org, "signup" timeline event auto-created
+          26. POST /api/customers (missing required fields) → 400
+          27. GET /api/customers?q=<search> → 200 with matching results
+          28. GET /api/customers/:id → 200 { customer }
+          29. GET /api/customers/<unknownId> → 404
+          30. PUT /api/customers/:id { healthScore: 42, tags: ["VIP","Renewal"] } → 200, updates persist
+          31. GET /api/customers/:id/timeline → 200 { timeline: [...] }, sorted by occurredAt desc (12 events for seeded customers)
+          32. POST /api/customers/:id/timeline { type: "note", title: "...", description: "..." } → 201 { event }, appears in subsequent GET
+          
+          ✅ SUB-COLLECTIONS (6/6):
+          33. GET /api/customers/:id/policies → 200 { policies } (3 for seeded customers)
+          34. GET /api/customers/:id/tickets → 200 { tickets } (3 for seeded customers)
+          35. GET /api/customers/:id/campaigns → 200 { campaigns } (3 for seeded customers)
+          36. GET /api/customers/:id/rewards → 200 { rewards: { tier, pointsBalance, lifetimePoints, perks, history } } (not null for seeded customers, tier: Gold)
+          37. GET /api/customers/:id/calls → 200 { calls: [...] } (3 for seeded customers, mix of "ai" and "voice" types)
+          38. DELETE /api/customers/:id → 200, subsequent GET returns 404, all sub-collection endpoints return 404
+          
+          ✅ SECURITY (1/1):
+          39. All customer endpoints without auth → 401
+          
+          ✅ MULTI-TENANT ISOLATION (1/1):
+          40. Created Org A and Org B, seeded demo in each:
+              - GET /api/customers from Org A token returns only Org A's 6 customers
+              - GET /api/customers from Org B token returns only Org B's 6 customers
+              - Org A token accessing Org B customer ID → 404 on GET, PUT, DELETE
+              - All sub-collection endpoints (timeline, policies, tickets, campaigns, rewards, calls) → 404 when Org A tries to access Org B's customer
+              - PUT /api/organization with Org A token only modifies Org A, Org B unchanged
+          
+          SECURITY VERIFICATION:
+          ✅ No _id leakage in any customer response
+          ✅ All customer data properly scoped by organizationId
+          ✅ Cross-org access properly blocked with 404 (not 403, which would leak existence)
+          ✅ Cascade delete works correctly (customer + all sub-collections)
+          ✅ Timeline events sorted desc by occurredAt
+          ✅ Search works across firstName, lastName, email, company
+          ✅ Seed demo creates 6 customers with full sub-collection data
+          
+          CONCLUSION: All Customer360 endpoints working correctly with proper multi-tenant isolation.
+
+test_plan:
+  current_focus: []
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+  - agent: "main"
+    message: |
+      Added organization management + multi-tenant Customer360 backend. Please run a fresh test pass
+      focused on (a) organization endpoints, (b) invites + invite-token registration, (c) customer CRUD
+      + sub-collections + seed-demo, and (d) multi-tenant isolation (org A cannot read org B's customers).
+      All existing auth tests should still pass.
+  - agent: "testing"
+    message: |
+      COMPREHENSIVE BACKEND TESTING COMPLETE - ALL TESTS PASSING (82/82 - 100%)
+      
+      TEST BREAKDOWN:
+      ✅ Auth Regression Tests: 35/35 (100%) - No regressions detected
+      ✅ Organization Endpoints: 4/4 (100%)
+      ✅ Members Management: 6/6 (100%)
+      ✅ Invites System: 8/8 (100%)
+      ✅ Register with Invite: 4/4 (100%)
+      ✅ Customer360 CRUD: 10/10 (100%)
+      ✅ Customer Sub-Collections: 6/6 (100%)
+      ✅ Security & Auth: 1/1 (100%)
+      ✅ Multi-Tenant Isolation: 1/1 (100%)
+      
+      CRITICAL SECURITY TESTS PASSED:
+      ✅ Multi-tenant isolation verified (Org A cannot access Org B's data)
+      ✅ Admin-only endpoints properly enforce permissions
+      ✅ No passwordHash or _id leakage in any response
+      ✅ Refresh token rotation working correctly
+      ✅ Member deletion revokes refresh tokens
+      ✅ Cross-org access returns 404 (not 403, preventing data enumeration)
+      
+      ROLE-BASED ACCESS CONTROL VERIFIED:
+      ✅ org_admin and super_admin have admin privileges
+      ✅ Non-admin roles (sales, marketing, support, executive, standard_user) correctly denied admin operations
+      ✅ Register without inviteToken → org_admin of new org
+      ✅ Register with inviteToken → invite's role in invite's org
+      
+      ALL ENDPOINTS TESTED AND WORKING:
+      - Organization: GET, PUT (admin-only)
+      - Members: GET, PUT (admin-only), DELETE (admin-only, cannot delete self)
+      - Invites: GET, POST (admin-only), DELETE (admin-only), GET public preview
+      - Register: with/without inviteToken, email validation, token reuse prevention
+      - Customers: GET (list/search), POST, PUT, DELETE, seed-demo
+      - Customer Sub-Collections: timeline, policies, tickets, campaigns, rewards, calls
+      
+      NO CRITICAL ISSUES FOUND. All backend APIs are production-ready.
