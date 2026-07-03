@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import { CommandCenter } from '@/components/command-center';
 
 const campaigns = [
   { name: 'Expansion-EU Q3', channel: 'LinkedIn + Email', status: 'Live', open: 42, ctr: 8.4, sent: '24,000' },
@@ -35,6 +36,12 @@ export default function MarketingPage() {
         <StatCard label="Avg CTR" value="9.2%" delta="+1.4pts" icon={MousePointerClick} accent="blue" index={2} />
         <StatCard label="MQLs generated" value="1,840" delta="+24%" icon={Users} accent="emerald" index={3} />
       </div>
+
+      <CommandCenter
+        connectors={['marketing']}
+        title="Open the Marketing Command"
+        subtitle="Admins, Org Admins, and Executives can jump straight into the connected Marketing system — pre-authenticated."
+      />
 
       <Card className="glass mb-6">
         <CardHeader><CardTitle>Active campaigns</CardTitle></CardHeader>

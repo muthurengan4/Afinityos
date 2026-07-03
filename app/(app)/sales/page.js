@@ -5,6 +5,7 @@ import { PageHeader, StatCard, ComingSoonNote, FeatureCard } from '@/components/
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { CommandCenter } from '@/components/command-center';
 
 const deals = [
   { name: 'Acme Corp – Platform Expansion', value: '$180,000', stage: 'Negotiation', owner: 'Mira Chen', probability: 80 },
@@ -35,6 +36,12 @@ export default function SalesPage() {
         <StatCard label="Win rate" value="38%" delta="+4%" icon={Trophy} accent="blue" index={2} />
         <StatCard label="Active reps" value="42" delta="+3" icon={Users} accent="amber" index={3} />
       </div>
+
+      <CommandCenter
+        connectors={['sales']}
+        title="Open the AI Sales Dashboard"
+        subtitle="Admins, Org Admins, and Executives can open the connected Sales system with a single click — no re-login required."
+      />
 
       <Card className="glass">
         <CardHeader>

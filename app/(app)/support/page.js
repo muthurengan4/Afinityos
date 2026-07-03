@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { CommandCenter } from '@/components/command-center';
 
 const tickets = [
   { id: 'T-10428', subject: 'SAML SSO not redirecting', requester: 'Maya P.', priority: 'High', status: 'Open', age: '14m' },
@@ -37,6 +38,12 @@ export default function SupportPage() {
         <StatCard label="Resolved today" value="284" delta="+18%" icon={CheckCircle2} accent="emerald" index={2} />
         <StatCard label="CSAT" value="96%" delta="+2pts" icon={ThumbsUp} accent="blue" index={3} />
       </div>
+
+      <CommandCenter
+        connectors={['support']}
+        title="Open the Support Console"
+        subtitle="Admins, Org Admins, and Executives can open the connected Support system with a single click — no re-login required."
+      />
 
       <Card className="glass">
         <CardHeader><CardTitle>Queue</CardTitle></CardHeader>

@@ -10,6 +10,7 @@ import { useAuth } from '@/lib/auth-context';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Progress } from '@/components/ui/progress';
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid } from 'recharts';
+import { CommandCenter } from '@/components/command-center';
 
 const chartData = [
   { name: 'Mon', value: 32 }, { name: 'Tue', value: 48 }, { name: 'Wed', value: 41 },
@@ -47,6 +48,8 @@ export default function DashboardPage() {
         <StatCard label="AI Tasks Automated" value="38,210" delta="+28.6%" icon={Zap} accent="emerald" index={2} />
         <StatCard label="NPS Score" value="72" delta="+5.0%" icon={Activity} accent="amber" index={3} />
       </div>
+
+      <CommandCenter />
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-6">
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="xl:col-span-2">
