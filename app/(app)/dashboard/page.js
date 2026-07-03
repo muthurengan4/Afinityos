@@ -1,6 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
+import Link from 'next/link';
 import { LayoutDashboard, TrendingUp, Users, DollarSign, Activity, ArrowUpRight, Sparkles, Zap, Calendar } from 'lucide-react';
 import { PageHeader, StatCard, FeatureCard } from '@/components/page-shell';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -37,7 +38,7 @@ export default function DashboardPage() {
         actions={
           <>
             <Button variant="outline" size="sm"><Calendar className="h-4 w-4 mr-2" /> Last 7 days</Button>
-            <Button size="sm" className="bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"><Sparkles className="h-4 w-4 mr-2" /> Ask AfinityAI</Button>
+            <Button size="sm" asChild className="bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"><Link href="/ask"><Sparkles className="h-4 w-4 mr-2" /> Ask AfinityAI</Link></Button>
           </>
         }
       />
