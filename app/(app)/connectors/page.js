@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import * as LucideIcons from 'lucide-react';
 import { Plug, CheckCircle2, XCircle, Loader2, Cable, Settings as SettingsIcon, Play, ExternalLink, Sparkles, Activity, Code, Wand2, Copy } from 'lucide-react';
 import { PageHeader, StatCard } from '@/components/page-shell';
@@ -19,11 +20,13 @@ import { motion } from 'framer-motion';
 
 export default function ConnectorsPage() {
   const { authFetch, user } = useAuth();
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const [connectors, setConnectors] = useState([]);
   const [calls, setCalls] = useState([]);
   const [loading, setLoading] = useState(true);
   const [configFor, setConfigFor] = useState(null);
-  const [cfgForm, setCfgForm] = useState({ baseUrl: '', apiKey: '' });
+  const [cfgForm, setCfgForm] = useState({ baseUrl: '', apiKey: '', serviceEmail: '', servicePassword: '' });
   const [testing, setTesting] = useState({});
   const [tryFor, setTryFor] = useState(null); // {connector, tool}
   const [tryParams, setTryParams] = useState('{}');
@@ -48,14 +51,40 @@ export default function ConnectorsPage() {
   };
   useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
 
+  // Support deep-link to open a specific connector's config modal via ?connector=<id>
+  useEffect(() => {
+    const target = searchParams.get('connector');
+    if (!target || connectors.length === 0) return;
+    const c = connectors.find((x) => x.id === target);
+    if (c) openConfig(c);
+    // Strip the query param so the modal doesn't re-open on refresh
+    router.replace('/connectors');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connectors, searchParams]);
+
   const openConfig = (c) => {
     setConfigFor(c);
-    setCfgForm({ baseUrl: '', apiKey: '' });
+    // Pre-fill with existing safe fields; passwords are never returned by the API.
+    setCfgForm({
+      baseUrl: c.config?.baseUrl || '',
+      apiKey: '',
+      serviceEmail: c.config?.serviceEmail || '',
+      servicePassword: '',
+    });
   };
   const saveConfig = async () => {
+    // Only send fields the user actually filled — empty strings would wipe existing values.
+    const payload = {};
+    for (const k of ['baseUrl', 'apiKey', 'serviceEmail', 'servicePassword']) {
+      if (cfgForm[k] && cfgForm[k].trim() !== '') payload[k] = cfgForm[k].trim();
+    }
+    if (Object.keys(payload).length === 0) {
+      toast.error('Fill at least one field before saving.');
+      return;
+    }
     const res = await authFetch(`/api/connectors/${configFor.id}/config`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(cfgForm),
+      body: JSON.stringify(payload),
     });
     if (res.ok) { toast.success('Configuration saved'); setConfigFor(null); load(); }
     else toast.error('Failed to save');
