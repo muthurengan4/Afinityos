@@ -110,6 +110,10 @@ export default function ConnectorsPage() {
     setCfgForm({ ...cfgForm, loginPath: p });
     toast.success(`Login Path set to ${p}. Click Save.`);
   };
+  const applySuggestedBase = (host, p) => {
+    setCfgForm({ ...cfgForm, baseUrl: host, loginPath: p || cfgForm.loginPath });
+    toast.success(`Base URL set to ${host}${p ? ` and Login Path to ${p}` : ''}. Click Save.`);
+  };
   const saveConfig = async () => {
     // Only send fields the user actually filled — empty strings would wipe existing values.
     const payload = {};
@@ -299,7 +303,12 @@ export default function ConnectorsPage() {
                         )}
                       </div>
                     )}
-                    {loginProbe.suggestedLoginPath ? (
+                    {loginProbe.suggestedBaseUrl ? (
+                      <>
+                        <p className="text-emerald-500 font-semibold pt-2"><CheckCircle2 className="h-3 w-3 inline mr-1" /> Different host works: <code>{loginProbe.suggestedBaseUrl}</code>{loginProbe.suggestedLoginPath ? <> at <code>{loginProbe.suggestedLoginPath}</code></> : null}</p>
+                        <Button size="sm" variant="outline" onClick={() => applySuggestedBase(loginProbe.suggestedBaseUrl, loginProbe.suggestedLoginPath)}>Use this host</Button>
+                      </>
+                    ) : loginProbe.suggestedLoginPath ? (
                       <>
                         <p className="text-emerald-500 font-semibold pt-2"><CheckCircle2 className="h-3 w-3 inline mr-1" /> Alternate path works: <code>{loginProbe.suggestedLoginPath}</code></p>
                         <Button size="sm" variant="outline" onClick={() => applySuggested(loginProbe.suggestedLoginPath)}>Use this path</Button>
@@ -310,7 +319,7 @@ export default function ConnectorsPage() {
                         <div className="space-y-1">
                           {(loginProbe.alternateProbes || []).map((p, i) => (
                             <p key={i} className="font-mono">
-                              <span className="text-muted-foreground">POST {p.path}</span> → <b>{p.status ?? p.error}</b>
+                              <span className="text-muted-foreground">POST {p.host ? p.host.replace(/^https?:\/\//, '') : ''}{p.path}</span> → <b>{p.status ?? p.error}</b>
                               {p.tokenFound ? <span className="text-emerald-500"> ✓ token</span> : null}
                             </p>
                           ))}
