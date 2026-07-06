@@ -43,12 +43,17 @@ export function SsoLaunchTile({ connectorId, name, description, icon: Icon = Roc
         body: JSON.stringify({ connectorId, returnPath }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Launch failed');
+      if (!res.ok) {
+        // Prefer the actionable hint from base-connector diagnostics if present
+        const hint = data.diagnostics?.hint;
+        const errMsg = hint ? `${data.error}\n${hint}` : (data.error || 'Launch failed');
+        throw new Error(errMsg);
+      }
       window.open(data.launchUrl, '_blank', 'noopener,noreferrer');
       toast.success(`Opened ${data.connectorName} in a new tab.`);
       setDetail(data);
     } catch (e) {
-      toast.error(e.message);
+      toast.error(e.message, { duration: 8000 });
     } finally {
       setLoading(false);
     }

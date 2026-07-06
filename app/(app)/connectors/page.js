@@ -26,8 +26,10 @@ export default function ConnectorsPage() {
   const [calls, setCalls] = useState([]);
   const [loading, setLoading] = useState(true);
   const [configFor, setConfigFor] = useState(null);
-  const [cfgForm, setCfgForm] = useState({ baseUrl: '', apiKey: '', serviceEmail: '', servicePassword: '' });
+  const [cfgForm, setCfgForm] = useState({ baseUrl: '', apiKey: '', serviceEmail: '', servicePassword: '', loginPath: '' });
   const [testing, setTesting] = useState({});
+  const [loginProbe, setLoginProbe] = useState(null);
+  const [probing, setProbing] = useState(false);
   const [tryFor, setTryFor] = useState(null); // {connector, tool}
   const [tryParams, setTryParams] = useState('{}');
   const [tryResult, setTryResult] = useState(null);
@@ -64,13 +66,49 @@ export default function ConnectorsPage() {
 
   const openConfig = (c) => {
     setConfigFor(c);
+    setLoginProbe(null);
     // Pre-fill with existing safe fields; passwords are never returned by the API.
     setCfgForm({
       baseUrl: c.config?.baseUrl || '',
       apiKey: '',
       serviceEmail: c.config?.serviceEmail || '',
       servicePassword: '',
+      loginPath: c.config?.loginPath || '',
     });
+  };
+
+  const testLogin = async () => {
+    if (!configFor) return;
+    setProbing(true);
+    setLoginProbe(null);
+    try {
+      // Save any pending edits before probing so the server uses the latest creds
+      const payload = {};
+      for (const k of ['baseUrl', 'apiKey', 'serviceEmail', 'servicePassword', 'loginPath']) {
+        if (cfgForm[k] && cfgForm[k].trim() !== '') payload[k] = cfgForm[k].trim();
+      }
+      if (Object.keys(payload).length > 0) {
+        await authFetch(`/api/connectors/${configFor.id}/config`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+        });
+      }
+      const res = await authFetch(`/api/connectors/${configFor.id}/test-login`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) {
+        setLoginProbe({ error: data.error || 'Test failed' });
+      } else {
+        setLoginProbe(data);
+        if (data.ok) toast.success('Login succeeded — token cached.');
+        else if (data.suggestedLoginPath) toast.message('Alternate login path found', { description: `Try ${data.suggestedLoginPath}` });
+        else toast.error('Login failed — see diagnostics below.');
+      }
+    } catch (e) { toast.error(e.message); }
+    finally { setProbing(false); }
+  };
+
+  const applySuggested = (p) => {
+    setCfgForm({ ...cfgForm, loginPath: p });
+    toast.success(`Login Path set to ${p}. Click Save.`);
   };
   const saveConfig = async () => {
     // Only send fields the user actually filled — empty strings would wipe existing values.
@@ -226,6 +264,64 @@ export default function ConnectorsPage() {
               <div className="space-y-2"><Label>Service email</Label><Input placeholder="service@…" value={cfgForm.serviceEmail || ''} onChange={(e) => setCfgForm({ ...cfgForm, serviceEmail: e.target.value })} /></div>
               <div className="space-y-2"><Label>Service password</Label><Input type="password" value={cfgForm.servicePassword || ''} onChange={(e) => setCfgForm({ ...cfgForm, servicePassword: e.target.value })} /></div>
             </div>
+            <div className="space-y-2">
+              <Label>Login Path <span className="text-muted-foreground font-normal">(optional — default <code>/api/auth/login</code>)</span></Label>
+              <Input placeholder="/api/auth/login" value={cfgForm.loginPath || ''} onChange={(e) => setCfgForm({ ...cfgForm, loginPath: e.target.value })} />
+              <p className="text-[10px] text-muted-foreground">Override if the target uses a non-standard route (e.g. <code>/auth/login</code>, <code>/api/v1/auth/login</code>, <code>/token</code>).</p>
+            </div>
+
+            <div className="pt-2">
+              <Button variant="outline" size="sm" onClick={testLogin} disabled={probing} className="w-full">
+                {probing ? <Loader2 className="h-3 w-3 mr-2 animate-spin" /> : <Play className="h-3 w-3 mr-2" />}
+                Test login &amp; auto-detect
+              </Button>
+            </div>
+
+            {loginProbe && (
+              <div className="rounded-lg border bg-muted/40 p-3 text-xs space-y-2 max-h-64 overflow-auto">
+                {loginProbe.error ? (
+                  <p className="text-rose-400"><XCircle className="h-3 w-3 inline mr-1" /> {loginProbe.error}</p>
+                ) : loginProbe.ok ? (
+                  <>
+                    <p className="text-emerald-500 font-semibold"><CheckCircle2 className="h-3 w-3 inline mr-1" /> Login succeeded</p>
+                    <p><span className="font-mono">POST {loginProbe.loginPath}</span> → 200</p>
+                    <p>Token cached: <code className="text-muted-foreground">{loginProbe.tokenPreview}</code></p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-amber-400 font-semibold"><XCircle className="h-3 w-3 inline mr-1" /> Login failed on configured path</p>
+                    {loginProbe.primaryDiagnostics && (
+                      <div className="ml-2 space-y-1">
+                        <p><span className="font-mono">POST {loginProbe.primaryDiagnostics.url}</span> → <b>{loginProbe.primaryDiagnostics.status}</b></p>
+                        <p className="text-muted-foreground">{loginProbe.primaryDiagnostics.hint}</p>
+                        {loginProbe.primaryDiagnostics.bodySnippet && (
+                          <pre className="text-[10px] font-mono bg-background/60 rounded p-2 overflow-x-auto whitespace-pre-wrap">{loginProbe.primaryDiagnostics.bodySnippet}</pre>
+                        )}
+                      </div>
+                    )}
+                    {loginProbe.suggestedLoginPath ? (
+                      <>
+                        <p className="text-emerald-500 font-semibold pt-2"><CheckCircle2 className="h-3 w-3 inline mr-1" /> Alternate path works: <code>{loginProbe.suggestedLoginPath}</code></p>
+                        <Button size="sm" variant="outline" onClick={() => applySuggested(loginProbe.suggestedLoginPath)}>Use this path</Button>
+                      </>
+                    ) : (
+                      <>
+                        <p className="pt-2 font-semibold">Alternate paths I tried:</p>
+                        <div className="space-y-1">
+                          {(loginProbe.alternateProbes || []).map((p, i) => (
+                            <p key={i} className="font-mono">
+                              <span className="text-muted-foreground">POST {p.path}</span> → <b>{p.status ?? p.error}</b>
+                              {p.tokenFound ? <span className="text-emerald-500"> ✓ token</span> : null}
+                            </p>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
             <p className="text-xs text-muted-foreground">Default env keys: <code className="font-mono">{configFor?.envKey}_URL</code>, <code className="font-mono">{configFor?.envKey}_API_KEY</code></p>
           </div>
           <DialogFooter>
