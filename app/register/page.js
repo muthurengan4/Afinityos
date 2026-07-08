@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
@@ -14,7 +14,7 @@ import { toast } from 'sonner';
 import { Loader2, Mail } from 'lucide-react';
 import { roleLabels } from '@/lib/nav-config';
 
-export default function RegisterPage() {
+function RegisterContent() {
   const router = useRouter();
   const sp = useSearchParams();
   const inviteToken = sp.get('invite');
@@ -117,3 +117,11 @@ export default function RegisterPage() {
     </AuthShell>
   );
 }
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <RegisterContent />
+    </Suspense>
+  );
+}
+

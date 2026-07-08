@@ -48,7 +48,7 @@ export default function CustomerDetailPage() {
           authFetch(`/api/customers/${id}/calls`),
         ]);
         if (cancelled) return;
-        if (!cRes.ok) { toast.error('Customer not found'); router.replace('/customer360'); return; }
+        if (!cRes.ok) { toast.error('Customer not found'); router.push('/customer360'); return; }
         const cd = await cRes.json();
         setCustomer(cd.customer);
         setTimeline((await tlRes.json()).timeline || []);
@@ -74,7 +74,7 @@ export default function CustomerDetailPage() {
       const res = await authFetch(`/api/customers/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Failed');
       toast.success('Customer deleted');
-      router.push('/customer360');
+      router.replace('/customer360');
     } catch (e) { toast.error(e.message); }
   };
 
